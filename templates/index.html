@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>高校课程持续改进系统</title>
+  <link rel="icon" type="image/png" href="/static/img/logo.png">
+  <link rel="preconnect" href="https://fonts.loli.net">
+  <link rel="preconnect" href="https://gstatic.loli.net" crossorigin>
+  <link href="https://fonts.loli.net/css2?family=Noto+Serif+SC:wght@600;700;900&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- 主题须在首帧前写入 <html data-theme>，故置于样式表之前同步加载 -->
+  <script src="/static/js/theme.js"></script>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div id="app"></div>
+  <noscript>
+    <div style="padding:40px;text-align:center;font-family:sans-serif;">
+      本系统需要启用 JavaScript 才能运行。
+    </div>
+  </noscript>
+
+  <script src="/static/vendor/vue.global.prod.js"></script>
+  <script src="/static/vendor/vue-router.global.prod.js"></script>
+  <!-- docx-preview 依赖 JSZip（UMD 外部依赖），须先于 docx-preview 加载 -->
+  <script src="/static/vendor/jszip.min.js"></script>
+  <script src="/static/vendor/docx-preview.min.js"></script>
+  <script src="/static/js/api.js"></script>
+
+  <!-- 视图：注册到全局注册表 window.VIEWS -->
+  <script src="/static/js/views/login.js"></script>
+  <script src="/static/js/views/teacher-dashboard.js"></script>
+  <script src="/static/js/views/teacher-tasks.js"></script>
+  <script src="/static/js/views/report-create.js"></script>
+  <script src="/static/js/views/measure-editor.js"></script>
+  <script src="/static/js/views/execution-form.js"></script>
+  <script src="/static/js/views/teacher-records.js"></script>
+  <script src="/static/js/views/leader-dashboard.js"></script>
+  <script src="/static/js/views/leader-approve-measures.js"></script>
+  <script src="/static/js/views/leader-review-achievement.js"></script>
+  <script src="/static/js/views/record-detail.js"></script>
+  <script src="/static/js/views/batch-import.js"></script>
+  <script src="/static/js/views/history-query.js"></script>
+  <script src="/static/js/views/audit-logs.js"></script>
+  <script src="/static/js/views/admin-users.js"></script>
+  <script src="/static/js/views/admin-years.js"></script>
+  <script src="/static/js/views/admin-courses.js"></script>
+  <script src="/static/js/views/admin-ai.js"></script>
+  <script src="/static/js/views/admin-dingtalk.js"></script>
+  <script src="/static/js/views/admin-security.js"></script>
+  <script src="/static/js/views/my-account.js"></script>
+  <script src="/static/js/views/dingtalk-callback.js"></script>
+
+  <!-- 路由 + 全局守卫 + 应用挂载 -->
+  <script src="/static/js/router.js"></script>
+</body>
+</html>

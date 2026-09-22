@@ -1,0 +1,4 @@
+flask
+flask-limiter
+openpyxl
+gunicorn
