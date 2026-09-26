@@ -254,8 +254,13 @@ def generate_measures(rid):
     # （source='ai'）；失败则降级到规则引擎（source='rule'）
     settings = ai_config.resolve_from_db(db)
     if ai_generator.is_enabled(settings):
+        # 课程上下文让模型产出贴合本课程的措施（报告行已 JOIN 出课程信息）
+        context = {k: report[k] for k in ('course_name', 'course_code',
+                                          'academic_year', 'term',
+                                          'teacher_name', 'title')}
         try:
-            items = ai_generator.generate_measures(report['content_text'] or '', settings)
+            items = ai_generator.generate_measures(
+                report['content_text'] or '', settings, context)
             source = 'ai'
         except Exception:  # noqa: BLE001 - AiGeneratorError 及其他异常均降级，不影响用户
             # 降级前记录可观测日志（AiGeneratorError 消息仅含异常类型名，不含密钥）

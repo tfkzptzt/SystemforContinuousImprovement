@@ -99,6 +99,17 @@ class ParseMeasuresTest(unittest.TestCase):
         items = parse_measures(_resp(content))
         self.assertEqual(len(items), MAX_MEASURES)
 
+    def test_dedups_repeated_content(self):
+        # 模型常返回仅排版不同的重复条目，去重后只保留首条
+        content = json.dumps({'measures': [
+            {'content': '增设装配图专项训练', 'verify_indicator': '达成度不低于0.72'},
+            {'content': '增设装配图 专项训练', 'verify_indicator': '另一指标'},
+            {'content': '调整期末考核权重', 'verify_indicator': '得分率不低于70%'},
+        ]}, ensure_ascii=False)
+        items = parse_measures(_resp(content))
+        self.assertEqual([i['content'] for i in items],
+                         ['增设装配图专项训练', '调整期末考核权重'])
+
     def test_empty_array_raises(self):
         with self.assertRaises(AiGeneratorError):
             parse_measures(_resp(json.dumps({'measures': []})))
@@ -242,12 +253,53 @@ class TruncateTest(unittest.TestCase):
     def test_short_text_unchanged(self):
         self.assertEqual(ai_generator._truncate('短文本'), '短文本')
 
-    def test_long_text_truncated_with_marker(self):
-        text = 'x' * (ai_generator.MAX_INPUT_CHARS + 100)
+    def test_text_at_limit_unchanged(self):
+        text = 'x' * ai_generator.MAX_INPUT_CHARS
+        self.assertEqual(ai_generator._truncate(text), text)
+
+    def test_long_text_keeps_head_and_tail(self):
+        # 报告的"问题分析/改进建议"章节在末尾，尾部必须真实保留
+        head_len = ai_generator.MAX_INPUT_CHARS - ai_generator._TAIL_CHARS
+        text = 'A' * head_len + 'M' * 5000 + 'Z' * ai_generator._TAIL_CHARS
         out = ai_generator._truncate(text)
-        self.assertTrue(out.endswith(ai_generator._TRUNCATED_SUFFIX))
+        self.assertIn(ai_generator._TRUNCATED_SUFFIX, out)
         self.assertEqual(len(out),
-                         ai_generator.MAX_INPUT_CHARS + len(ai_generator._TRUNCATED_SUFFIX))
+                         ai_generator.MAX_INPUT_CHARS
+                         + len(ai_generator._TRUNCATED_SUFFIX))
+        self.assertTrue(out.startswith('A' * head_len))
+        self.assertTrue(out.endswith('Z' * ai_generator._TAIL_CHARS))
+        # 中段被丢弃
+        self.assertNotIn('M', out)
+
+
+# ---------------------------------------------------------------------------
+# 3b. 课程上下文拼装
+# ---------------------------------------------------------------------------
+class FormatUserMessageTest(unittest.TestCase):
+    def test_full_context_header(self):
+        ctx = {'course_name': '工程制图', 'course_code': 'GCTZ1001',
+               'academic_year': '2024-2025学年', 'term': '第一学期',
+               'teacher_name': '王老师', 'title': '课程达成度报告'}
+        out = ai_generator.format_user_message(ctx, '正文内容')
+        self.assertIn('【课程信息】', out)
+        self.assertIn('课程名称：工程制图（GCTZ1001）', out)
+        self.assertIn('学年学期：2024-2025学年 第一学期', out)
+        self.assertIn('任课教师：王老师', out)
+        self.assertIn('报告标题：课程达成度报告', out)
+        self.assertIn('【报告正文】\n正文内容', out)
+
+    def test_missing_fields_omitted(self):
+        out = ai_generator.format_user_message({'course_name': '高等数学'}, '正文')
+        self.assertIn('课程名称：高等数学', out)
+        # 缺失字段不得输出空标签
+        for absent in ('（', '学年学期', '任课教师', '报告标题'):
+            self.assertNotIn(absent, out)
+
+    def test_no_context_yields_body_only(self):
+        for ctx in (None, {}):
+            out = ai_generator.format_user_message(ctx, '正文')
+            self.assertNotIn('【课程信息】', out)
+            self.assertEqual(out, '【报告正文】\n正文')
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +352,32 @@ class GenerateNetworkTest(unittest.TestCase):
         self.assertEqual(req.full_url, 'https://custom.example/v1/chat/completions')
         self.assertEqual(req.get_header('Authorization'), 'Bearer sk-test')
         self.assertEqual(m.call_args[1]['timeout'], 7)
+
+    def test_context_injected_into_user_message(self):
+        payload = json.dumps({'measures': [
+            {'content': '措施', 'verify_indicator': '指标'}]}, ensure_ascii=False)
+        fake = _FakeResponse(json.dumps(_resp(payload), ensure_ascii=False))
+        ctx = {'course_name': '工程制图', 'course_code': 'GCTZ1001',
+               'academic_year': '2024-2025学年', 'term': '第一学期',
+               'teacher_name': '王老师', 'title': '达成度报告'}
+        with mock.patch('urllib.request.urlopen', return_value=fake) as m:
+            ai_generator.generate_measures('报告正文', _settings(), ctx)
+        body = json.loads(m.call_args[0][0].data.decode('utf-8'))
+        user_msg = body['messages'][1]['content']
+        self.assertIn('课程名称：工程制图（GCTZ1001）', user_msg)
+        self.assertIn('学年学期：2024-2025学年 第一学期', user_msg)
+        self.assertIn('任课教师：王老师', user_msg)
+        self.assertIn('【报告正文】\n报告正文', user_msg)
+
+    def test_no_context_sends_body_only(self):
+        # 不传 context 时保持原有行为，仅发送报告正文
+        payload = json.dumps({'measures': [
+            {'content': '措施', 'verify_indicator': '指标'}]}, ensure_ascii=False)
+        fake = _FakeResponse(json.dumps(_resp(payload), ensure_ascii=False))
+        with mock.patch('urllib.request.urlopen', return_value=fake) as m:
+            ai_generator.generate_measures('报告正文', _settings())
+        body = json.loads(m.call_args[0][0].data.decode('utf-8'))
+        self.assertEqual(body['messages'][1]['content'], '【报告正文】\n报告正文')
 
     def test_invalid_response_body_raises(self):
         # 响应体本身非法 JSON（如网关返回 HTML 502 页面）
