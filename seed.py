@@ -39,7 +39,10 @@ def seed():
     db_mod.init_db()
     importer.ensure_import_template()
 
-    # 重建库时同步清空 uploads/ 目录（报告表已重建，保持库↔盘一致，保留目录本身）
+    # ⚠️ 清空 uploads/ 下的原始报告，仅适用于「全新建库」。
+    # init_db() 执行的是 CREATE TABLE IF NOT EXISTS，对已存在的库并不会重建表；
+    # 因此在已有业务数据上重跑本脚本，会删掉 .docx 文件却留下指向它们的 reports
+    # 行，导致列表可见但下载与预览全部失效。生产环境严禁重跑。
     os.makedirs(config.UPLOAD_DIR, exist_ok=True)
     for path in glob.glob(os.path.join(config.UPLOAD_DIR, '*.docx')):
         os.remove(path)
