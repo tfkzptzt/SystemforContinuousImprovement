@@ -56,6 +56,12 @@ def _parse_ai_timeout(raw, default=60.0):
 
 AI_TIMEOUT = _parse_ai_timeout(os.environ.get('AI_TIMEOUT', ''))
 
+# 是否开启模型思考模式（默认关闭）：思考模式会先输出大段推理再给答案，非流式调用
+# 必须把这些 token 全等完，耗时成倍增长；措施生成不需要推理链。
+# 后台「AI 配置」可覆盖此值（DB > env > 默认）。
+AI_ENABLE_THINKING = (os.environ.get('AI_ENABLE_THINKING', '') or '').strip().lower() \
+    in ('1', 'true', 'yes', 'on')
+
 # 钉钉登录（可选）：三个环境变量均配置后启用，任一缺失则钉钉登录入口不显示
 DINGTALK_APP_KEY = os.environ.get('DINGTALK_APP_KEY', '')
 DINGTALK_APP_SECRET = os.environ.get('DINGTALK_APP_SECRET', '')

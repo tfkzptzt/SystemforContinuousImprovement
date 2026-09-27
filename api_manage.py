@@ -1094,6 +1094,7 @@ def _ai_config_data(settings):
         'model': settings['model'],
         'timeout': settings['timeout'],
         'prompt': settings['prompt'],
+        'enable_thinking': settings['enable_thinking'],
         'default_prompt': ai_config.DEFAULT_PROMPT,
         'effective_source': settings['source'],
     }
@@ -1132,6 +1133,8 @@ def put_ai_config():
         if timeout <= 0:
             return fail('超时时间必须为正数')
         changes['ai_timeout'] = str(timeout)
+    if 'enable_thinking' in body:
+        changes['ai_enable_thinking'] = '1' if body.get('enable_thinking') else '0'
     clear_key = bool(body.get('clear_api_key'))
 
     if not changes and not clear_key:

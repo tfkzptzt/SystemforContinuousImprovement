@@ -44,7 +44,7 @@ MAX_ITEM_CHARS = 500
 # 请求温度（越低越稳定，措施生成偏确定性）
 _TEMPERATURE = 0.3
 
-# 关闭思考模式的开关只对这些域名下发。enable_thinking 是 DashScope/百炼专有扩展，
+# 思考模式开关只对这些域名下发。enable_thinking 是 DashScope/百炼专有扩展，
 # 其他 OpenAI 兼容服务遇到未知参数可能直接返回 400，因此按域名收窄而不是全局带上。
 _DASHSCOPE_HOSTS = ('aliyuncs.com',)
 
@@ -227,10 +227,10 @@ def _call_chat_completions(user_text, settings):
             {'role': 'user', 'content': user_text},
         ],
     }
-    # 思考模式下模型会先输出大段推理再给答案，非流式调用要把这些 token 全等完，
-    # 耗时成倍增长；措施生成不需要推理链，明确关掉。
+    # 思考模式开关由后台「AI 配置」控制（默认关闭）：开启后模型会先输出大段推理再给
+    # 答案，非流式调用要把这些 token 全等完，耗时成倍增长；措施生成一般不需要推理链。
     if _is_dashscope(base_url):
-        body['enable_thinking'] = False
+        body['enable_thinking'] = bool(settings.get('enable_thinking'))
     data = json.dumps(body, ensure_ascii=False).encode('utf-8')
     req = urllib.request.Request(url, data=data, method='POST')
     req.add_header('Authorization', 'Bearer ' + (settings.get('api_key') or ''))

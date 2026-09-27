@@ -7,13 +7,14 @@
 2. API Key 只写不读：任何接口/日志不回显明文，GET 仅返回 api_key_set 布尔与掩码；
 3. ai_enabled：DB 有值（'0'/'1'）时以 DB 为准；否则回退"环境变量 AI_API_KEY 非空即启用"；
 4. ai_timeout：容错解析（非法值回落默认），默认取 config.AI_TIMEOUT（env，缺省 60.0）；
-5. ai_prompt：系统提示词模板，DB 非空 > DEFAULT_PROMPT（原 ai_generator 内置提示词）。
+5. ai_prompt：系统提示词模板，DB 非空 > DEFAULT_PROMPT（原 ai_generator 内置提示词）；
+6. ai_enable_thinking：思考模式开关，DB 有值以 DB 为准，否则回退环境变量，默认关闭。
 """
 import config
 
 # settings 表键 → 配置字段映射（解析结果字典的键名）
 SETTINGS_KEYS = ('ai_enabled', 'ai_api_key', 'ai_base_url', 'ai_model',
-                 'ai_timeout', 'ai_prompt')
+                 'ai_timeout', 'ai_prompt', 'ai_enable_thinking')
 
 # 默认系统提示词（迁移自 ai_generator 原内置 _SYSTEM_PROMPT）
 # 条数与字数上限是硬约束而非风格偏好：输出 token 数直接决定耗时。实测某专属 MaaS
@@ -89,7 +90,8 @@ def resolve(get_db_row):
 
     :param get_db_row: 函数 (key) -> settings 行（含 'value' 列）或 None
     :return: {'enabled': bool, 'api_key': str, 'base_url': str, 'model': str,
-              'timeout': float, 'prompt': str, 'source': {键: 'db'|'env'|''}}
+              'timeout': float, 'prompt': str, 'enable_thinking': bool,
+              'source': {键: 'db'|'env'|''}}
               source 记录各键生效来源（'' 表示 DB/env 均未配置，走默认值）。
     """
     db_enabled = _db_value(get_db_row, 'ai_enabled')
@@ -98,6 +100,7 @@ def resolve(get_db_row):
     db_model = _db_value(get_db_row, 'ai_model')
     db_timeout = _db_value(get_db_row, 'ai_timeout')
     db_prompt = _db_value(get_db_row, 'ai_prompt')
+    db_thinking = _db_value(get_db_row, 'ai_enable_thinking')
 
     env_key = (config.AI_API_KEY or '').strip()
 
@@ -117,6 +120,12 @@ def resolve(get_db_row):
 
     timeout = _parse_timeout(db_timeout or '', config.AI_TIMEOUT)
 
+    # 思考模式：DB 有值以 DB 为准（'1' 开 / '0' 关），否则回退环境变量，默认关闭
+    if db_thinking is not None:
+        enable_thinking = db_thinking == '1'
+    else:
+        enable_thinking = bool(config.AI_ENABLE_THINKING)
+
     source = {
         'enabled': 'db' if db_enabled is not None else ('env' if env_key else ''),
         'api_key': 'db' if db_key else ('env' if env_key else ''),
@@ -124,10 +133,11 @@ def resolve(get_db_row):
         'model': 'db' if db_model else 'env',
         'timeout': 'db' if db_timeout else 'env',
         'prompt': 'db' if db_prompt else 'default',
+        'enable_thinking': 'db' if db_thinking is not None else 'env',
     }
     return {'enabled': enabled, 'api_key': api_key, 'base_url': base_url,
             'model': model, 'timeout': timeout, 'prompt': prompt,
-            'source': source}
+            'enable_thinking': enable_thinking, 'source': source}
 
 
 def resolve_from_db(db):

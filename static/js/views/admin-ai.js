@@ -20,7 +20,7 @@ window.VIEWS.AdminAi = {
       <div class="notice notice-blue" style="margin-bottom:18px;">
         <span class="n-ico">ℹ</span>
         <div>
-          未在此处配置时，系统将使用服务器环境变量（AI_API_KEY / AI_BASE_URL / AI_MODEL / AI_TIMEOUT）。<br>
+          未在此处配置时，系统将使用服务器环境变量（AI_API_KEY / AI_BASE_URL / AI_MODEL / AI_TIMEOUT / AI_ENABLE_THINKING）。<br>
           AI 调用失败时自动回退内置规则引擎，不影响正常业务流程。
         </div>
       </div>
@@ -72,6 +72,16 @@ window.VIEWS.AdminAi = {
                  min="1" max="120" step="1" style="max-width:140px;">
           <p class="form-hint">单次 AI 请求超时时间。耗时取决于端点吞吐：公共 DashScope 约 20-50 秒，专属部署端点可能超过 85 秒，建议 60-120 秒；该值须小于 gunicorn 的 --timeout 与 Nginx 的 proxy_read_timeout，否则请求会被上游先掐断。</p>
         </div>
+
+        <div class="field">
+          <label class="field-label">思考模式</label>
+          <label class="check-card" :class="{ checked: form.enable_thinking }" style="max-width:280px;">
+            <input type="checkbox" v-model="form.enable_thinking">
+            <span>{{ form.enable_thinking ? '已开启' : '已关闭（推荐）' }}</span>
+          </label>
+          <p class="form-hint">开启后模型会先输出一大段推理过程再给答案，本系统为非流式调用，必须等推理全部生成完才能拿到结果，耗时可能成倍增长并触发超时降级。改进措施生成不需要推理链，建议保持关闭。</p>
+          <p class="form-hint">该开关是阿里云百炼 / DashScope 的专有参数，仅当 Base URL 为 <code>aliyuncs.com</code> 域名时随请求下发，其他服务商不受影响。</p>
+        </div>
       </div>
 
       <div class="card">
@@ -118,7 +128,8 @@ window.VIEWS.AdminAi = {
         base_url: '',
         model: '',
         timeout: 60,
-        prompt: ''
+        prompt: '',
+        enable_thinking: false
       },
       testResult: null
     };
@@ -142,6 +153,7 @@ window.VIEWS.AdminAi = {
         this.form.model = data.model || '';
         this.form.timeout = data.timeout || 60;
         this.form.prompt = data.prompt || '';
+        this.form.enable_thinking = !!data.enable_thinking;
       } catch (e) {
         window.toast(e.message, 'error');
       } finally {
@@ -154,7 +166,8 @@ window.VIEWS.AdminAi = {
         base_url: this.form.base_url,
         model: this.form.model,
         timeout: this.form.timeout,
-        prompt: this.form.prompt
+        prompt: this.form.prompt,
+        enable_thinking: this.form.enable_thinking
       };
       if (this.form.api_key) payload.api_key = this.form.api_key;
       this.saving = true;
@@ -181,6 +194,7 @@ window.VIEWS.AdminAi = {
           model: this.form.model,
           timeout: this.form.timeout,
           prompt: this.form.prompt,
+          enable_thinking: this.form.enable_thinking,
           clear_api_key: true
         };
         var data = await window.API.put('/api/admin/ai-config', payload);

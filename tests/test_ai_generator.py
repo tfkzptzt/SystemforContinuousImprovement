@@ -29,7 +29,7 @@ def _settings(**over):
     base = {'enabled': True, 'api_key': 'sk-test',
             'base_url': config.AI_BASE_URL, 'model': config.AI_MODEL,
             'timeout': config.AI_TIMEOUT, 'prompt': ai_config.DEFAULT_PROMPT,
-            'source': {}}
+            'enable_thinking': False, 'source': {}}
     base.update(over)
     return base
 
@@ -239,6 +239,25 @@ class AiConfigResolveTest(unittest.TestCase):
             s = ai_config.resolve(_row_getter({'ai_timeout': bad}))
             self.assertEqual(s['timeout'], config.AI_TIMEOUT)
 
+    def test_enable_thinking_db_over_env_and_default(self):
+        # DB 未配置时回退环境变量（默认关闭）
+        with mock.patch.object(config, 'AI_ENABLE_THINKING', False):
+            s = ai_config.resolve(_row_getter({}))
+            self.assertFalse(s['enable_thinking'])
+            self.assertEqual(s['source']['enable_thinking'], 'env')
+        with mock.patch.object(config, 'AI_ENABLE_THINKING', True):
+            s = ai_config.resolve(_row_getter({}))
+            self.assertTrue(s['enable_thinking'])
+            # DB 显式关闭优先于环境变量开启
+            s = ai_config.resolve(_row_getter({'ai_enable_thinking': '0'}))
+            self.assertFalse(s['enable_thinking'])
+            self.assertEqual(s['source']['enable_thinking'], 'db')
+            # DB 显式开启优先于环境变量关闭
+        with mock.patch.object(config, 'AI_ENABLE_THINKING', False):
+            s = ai_config.resolve(_row_getter({'ai_enable_thinking': '1'}))
+            self.assertTrue(s['enable_thinking'])
+            self.assertEqual(s['source']['enable_thinking'], 'db')
+
     def test_mask_api_key(self):
         self.assertEqual(ai_config.mask_api_key('sk-secret'), '******')
         self.assertEqual(ai_config.mask_api_key(''), '')
@@ -353,19 +372,21 @@ class GenerateNetworkTest(unittest.TestCase):
         self.assertEqual(req.get_header('Authorization'), 'Bearer sk-test')
         self.assertEqual(m.call_args[1]['timeout'], 7)
 
-    def test_thinking_disabled_for_aliyun_base_url(self):
-        # 阿里云端点（含专属 MaaS 部署域名）必须显式关闭思考模式，否则耗时成倍增长
+    def test_thinking_flag_for_aliyun_base_url(self):
+        # 阿里云端点（含专属 MaaS 部署域名）随配置下发 enable_thinking，默认关闭
         payload = json.dumps({'measures': [
             {'content': '措施', 'verify_indicator': '指标'}]}, ensure_ascii=False)
         for base in ('https://dashscope.aliyuncs.com/compatible-mode/v1',
                      'https://ws-6k1yaxly57thatc2.cn-beijing.maas.aliyuncs.com'
                      '/compatible-mode/v1'):
-            fake = _FakeResponse(json.dumps(_resp(payload), ensure_ascii=False))
-            with self.subTest(base_url=base):
-                with mock.patch('urllib.request.urlopen', return_value=fake) as m:
-                    ai_generator.generate_measures('正文', _settings(base_url=base))
-                body = json.loads(m.call_args[0][0].data.decode('utf-8'))
-                self.assertIs(body['enable_thinking'], False)
+            for flag in (False, True):
+                fake = _FakeResponse(json.dumps(_resp(payload), ensure_ascii=False))
+                with self.subTest(base_url=base, enable_thinking=flag):
+                    with mock.patch('urllib.request.urlopen', return_value=fake) as m:
+                        ai_generator.generate_measures(
+                            '正文', _settings(base_url=base, enable_thinking=flag))
+                    body = json.loads(m.call_args[0][0].data.decode('utf-8'))
+                    self.assertIs(body['enable_thinking'], flag)
 
     def test_no_thinking_param_for_other_providers(self):
         # enable_thinking 是 DashScope 专有扩展，下发给其他兼容服务可能被拒（400）
@@ -376,9 +397,22 @@ class GenerateNetworkTest(unittest.TestCase):
             fake = _FakeResponse(json.dumps(_resp(payload), ensure_ascii=False))
             with self.subTest(base_url=base):
                 with mock.patch('urllib.request.urlopen', return_value=fake) as m:
-                    ai_generator.generate_measures('正文', _settings(base_url=base))
+                    ai_generator.generate_measures(
+                        '正文', _settings(base_url=base, enable_thinking=True))
                 body = json.loads(m.call_args[0][0].data.decode('utf-8'))
                 self.assertNotIn('enable_thinking', body)
+
+    def test_legacy_settings_without_thinking_key(self):
+        # 旧配置字典缺少该键时按关闭处理，不得抛 KeyError
+        payload = json.dumps({'measures': [
+            {'content': '措施', 'verify_indicator': '指标'}]}, ensure_ascii=False)
+        settings = _settings()
+        del settings['enable_thinking']
+        fake = _FakeResponse(json.dumps(_resp(payload), ensure_ascii=False))
+        with mock.patch('urllib.request.urlopen', return_value=fake) as m:
+            ai_generator.generate_measures('正文', settings)
+        body = json.loads(m.call_args[0][0].data.decode('utf-8'))
+        self.assertIs(body['enable_thinking'], False)
 
     def test_context_injected_into_user_message(self):
         payload = json.dumps({'measures': [

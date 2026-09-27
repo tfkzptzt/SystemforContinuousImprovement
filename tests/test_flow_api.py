@@ -812,7 +812,8 @@ class AiConfigApiTest(FlowApiBase):
         self.login('admin01')
         data = self.client.get('/api/admin/ai-config').get_json()['data']
         for field in ('enabled', 'api_key_set', 'api_key_masked', 'base_url',
-                      'model', 'timeout', 'prompt', 'default_prompt', 'effective_source'):
+                      'model', 'timeout', 'prompt', 'default_prompt',
+                      'enable_thinking', 'effective_source'):
             self.assertIn(field, data)
         self.assertFalse(data['api_key_set'])
         self.assertEqual(data['api_key_masked'], '')
@@ -820,6 +821,45 @@ class AiConfigApiTest(FlowApiBase):
         self.assertEqual(data['default_prompt'], ai_config.DEFAULT_PROMPT)
         self.assertEqual(data['effective_source']['api_key'], '')
         self.assertEqual(data['effective_source']['prompt'], 'default')
+        # 思考模式默认关闭
+        self.assertFalse(data['enable_thinking'])
+        self.assertEqual(data['effective_source']['enable_thinking'], 'env')
+
+    def test_put_enable_thinking_persists(self):
+        self.login('admin01')
+        data = self.client.put('/api/admin/ai-config',
+                               json={'enable_thinking': True}).get_json()['data']
+        self.assertTrue(data['enable_thinking'])
+        self.assertEqual(data['effective_source']['enable_thinking'], 'db')
+        self.assertEqual(self.query(
+            "SELECT value FROM settings WHERE key='ai_enable_thinking'"
+        )[0]['value'], '1')
+
+        data = self.client.put('/api/admin/ai-config',
+                               json={'enable_thinking': False}).get_json()['data']
+        self.assertFalse(data['enable_thinking'])
+        self.assertEqual(self.query(
+            "SELECT value FROM settings WHERE key='ai_enable_thinking'"
+        )[0]['value'], '0')
+
+    def test_put_thinking_reaches_generator_body(self):
+        # 后台开关最终体现在发往阿里云端点的请求体里
+        self.login('admin01')
+        self.client.put('/api/admin/ai-config', json={
+            'enabled': True, 'api_key': 'sk-db', 'enable_thinking': True,
+            'base_url': 'https://dashscope.aliyuncs.com/compatible-mode/v1'})
+        rid = self.insert_report()
+        payload = json.dumps({'measures': [
+            {'content': '措施', 'verify_indicator': '指标'}]}, ensure_ascii=False)
+        fake = _FakeResponse(json.dumps(
+            {'choices': [{'message': {'role': 'assistant', 'content': payload}}]},
+            ensure_ascii=False))
+        self.login('teacher01')
+        with mock.patch('urllib.request.urlopen', return_value=fake) as m:
+            r = self.client.post(f'/api/reports/{rid}/generate')
+        self.assertTrue(r.get_json()['ok'], r.get_json())
+        body = json.loads(m.call_args[0][0].data.decode('utf-8'))
+        self.assertIs(body['enable_thinking'], True)
 
     def test_put_key_masked_and_never_echoed(self):
         self.login('admin01')

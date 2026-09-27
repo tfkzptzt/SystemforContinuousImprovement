@@ -64,7 +64,8 @@ python app.py
 | `AI_API_KEY` | 大模型 API 密钥；**为空即视为未启用 AI**，直接走规则引擎 | 空（未启用） |
 | `AI_BASE_URL` | OpenAI 兼容服务的 base url（**不带** `/chat/completions`，系统自动拼接） | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
 | `AI_MODEL` | 模型名 | `qwen-plus` |
-| `AI_TIMEOUT` | 单次请求超时（**必须为纯数字秒**，非法值如空串/`30s`/负数将被忽略并回落 20） | `20` |
+| `AI_TIMEOUT` | 单次请求超时（**必须为纯数字秒**，非法值如空串/`30s`/负数将被忽略并回落默认值） | `60` |
+| `AI_ENABLE_THINKING` | 是否开启模型思考模式（`1`/`true`/`yes`/`on` 视为开启）。开启后模型先输出推理过程再给答案，非流式调用耗时成倍增长，**建议保持关闭** | 关闭 |
 
 > 「OpenAI 兼容」指服务商提供与 OpenAI 相同的 `POST {base_url}/chat/completions` 接口与请求/响应结构（`Authorization: Bearer <key>`、`messages`、`choices[0].message.content`）。阿里云百炼、DeepSeek、Moonshot、本地 vLLM/Ollama 等均提供此兼容端点。
 
@@ -91,7 +92,7 @@ $env:AI_MODEL    = "deepseek-chat"
 - 日志与异常信息中一律不会出现密钥明文；后台 API 仅返回掩码（`******`）。
 - 宝塔面板部署时，在「Python 项目管理器 → 项目环境变量」中设置以上变量后重启项目即可。
 - **启用 AI 后须按整条链路调大超时**：默认提示词要求 3-4 条措施、每条 content 60-120 字并含量化验证指标（输出约 700 token）。耗时完全取决于端点吞吐：公共 DashScope 约 20-50 秒，专属 MaaS 部署实测约 8 token/s、需 85 秒以上。`AI_TIMEOUT` 默认 60s，用专属端点时在后台调到 120。三处取值必须递增：`AI_TIMEOUT < gunicorn --timeout < Nginx proxy_read_timeout`（例如 120 < 150 < 200），否则上游先掐断只会得到 502。推荐启动参数 `gunicorn app:app --timeout 150 --workers 1 --threads 4`：长请求只占用一个线程而非整个进程，且单进程可让登录限速（`memory://` 按进程计数）保持精确。AI 调用超时**不会向前端报错**，后端会静默降级到规则引擎（产出较通用），服务端日志留一条 `AI 生成失败，降级到规则引擎`。
-- **阿里云端点自动关闭思考模式**：`base_url` 主机名属于 `aliyuncs.com` 时，请求体会带上 DashScope 专有的 `enable_thinking: false`。qwen3 系列开启思考模式会先输出大段推理，非流式调用必须等完这些 token，耗时成倍增长；措施生成不需要推理链。其他 OpenAI 兼容服务不会收到该参数（可能被当作未知字段拒绝），判定逻辑见 `services/ai_generator.py:_is_dashscope`。
+- **思考模式默认关闭，可在后台开启**：后台「AI 配置 → 思考模式」开关（环境变量 `AI_ENABLE_THINKING` 为兜底），配置优先级同样是 DB > env > 默认。开启后模型会先输出一大段推理再给答案，本系统是非流式调用，必须等推理全部生成完才能拿到结果，耗时可能成倍增长并触发超时降级——改进措施生成不需要推理链，一般保持关闭。该开关是 DashScope/百炼专有参数，**仅当 Base URL 主机名属于 `aliyuncs.com` 时才随请求下发**（其他兼容服务可能把未知字段当错误拒绝），判定逻辑见 `services/ai_generator.py:_is_dashscope`。
 - 生成来源仅在**本次由 AI 成功生成**时记录到操作日志的 `generate_source` 字段（值为 `ai`）；走规则引擎（未启用或降级）时不写该字段，避免审计日志/时间线出现恒定噪声。
 
 
