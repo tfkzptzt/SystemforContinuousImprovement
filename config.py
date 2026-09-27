@@ -41,9 +41,11 @@ AI_API_KEY = os.environ.get('AI_API_KEY', '')
 AI_BASE_URL = os.environ.get('AI_BASE_URL', 'https://dashscope.aliyuncs.com/compatible-mode/v1')
 # 模型名，默认通义千问 qwen-plus
 AI_MODEL = os.environ.get('AI_MODEL', 'qwen-plus')
-# 单次请求超时（秒）：容错解析，非法值（空串/非数字/≤0）回落默认 20.0
-# 默认 20.0 低于 gunicorn sync worker 默认 30s 超时，保证 AI 失败时降级分支有机会执行
-def _parse_ai_timeout(raw, default=20.0):
+# 单次请求超时（秒）：容错解析，非法值（空串/非数字/≤0）回落默认 60.0
+# 默认提示词要求 3-6 条、每条 80-200 字并附量化验证指标，非流式输出约 1500+ token，
+# 20s 必然超时并被降级到规则引擎，故下限取 60s。部署时须保证链路递增：
+# AI_TIMEOUT < gunicorn --timeout < Nginx proxy_read_timeout
+def _parse_ai_timeout(raw, default=60.0):
     try:
         val = float(str(raw).strip())
     except (TypeError, ValueError):

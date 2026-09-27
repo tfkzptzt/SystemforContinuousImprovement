@@ -90,7 +90,7 @@ $env:AI_MODEL    = "deepseek-chat"
 - **后台配置会将密钥明文存于 `data.db` 的 `settings` 表**（配置优先级 DB > env > default）。启用后台配置后须把 `data.db` 视为敏感文件：勿提交 Git、备份需加密。若仅使用环境变量注入，保持 DB 中 `ai_api_key` 为空即可（后台「清除密钥」按钮可清空）。
 - 日志与异常信息中一律不会出现密钥明文；后台 API 仅返回掩码（`******`）。
 - 宝塔面板部署时，在「Python 项目管理器 → 项目环境变量」中设置以上变量后重启项目即可。
-- **启用 AI 后建议调大 Web 服务器超时**：AI 外呼会占用 worker，`AI_TIMEOUT` 默认 20s、失败时还要降级跑规则引擎，若用 gunicorn 默认 30s sync worker 超时易撞车。推荐启动参数：`gunicorn app:app --timeout 60 --workers 2`（超时 60s 给 AI 调用 + 降级预留充足余量，2 个 worker 避免单 worker 被长请求独占）。
+- **启用 AI 后须按整条链路调大超时**：默认提示词要求 3-6 条措施、每条 80-200 字并含量化验证指标，一次非流式生成通常要 20-60 秒，`AI_TIMEOUT` 默认 60s。三处取值必须递增：`AI_TIMEOUT(60) < gunicorn --timeout(120) < Nginx proxy_read_timeout(180)`，否则上游先掐断只会得到 502。推荐启动参数 `gunicorn app:app --timeout 120 --workers 1 --threads 4`：长请求只占用一个线程而非整个进程，且单进程可让登录限速（`memory://` 按进程计数）保持精确。AI 调用超时**不会向前端报错**，后端会静默降级到规则引擎（产出较通用），服务端日志留一条 `AI 生成失败，降级到规则引擎`。
 - 生成来源仅在**本次由 AI 成功生成**时记录到操作日志的 `generate_source` 字段（值为 `ai`）；走规则引擎（未启用或降级）时不写该字段，避免审计日志/时间线出现恒定噪声。
 
 

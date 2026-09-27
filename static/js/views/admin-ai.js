@@ -70,7 +70,7 @@ window.VIEWS.AdminAi = {
           <label class="field-label">超时（秒）</label>
           <input class="input" type="number" v-model.number="form.timeout"
                  min="1" max="120" step="1" style="max-width:140px;">
-          <p class="form-hint">单次 AI 请求超时时间，建议 10-30 秒。</p>
+          <p class="form-hint">单次 AI 请求超时时间。默认提示词要求每条措施含问题引用、具体做法与验证口径，生成较慢，建议 60-90 秒；该值须小于 gunicorn 的 --timeout 与 Nginx 的 proxy_read_timeout，否则请求会被上游先掐断。</p>
         </div>
       </div>
 
@@ -117,7 +117,7 @@ window.VIEWS.AdminAi = {
         api_key: '',
         base_url: '',
         model: '',
-        timeout: 20,
+        timeout: 60,
         prompt: ''
       },
       testResult: null
@@ -140,7 +140,7 @@ window.VIEWS.AdminAi = {
         this.form.api_key = '';
         this.form.base_url = data.base_url || '';
         this.form.model = data.model || '';
-        this.form.timeout = data.timeout || 20;
+        this.form.timeout = data.timeout || 60;
         this.form.prompt = data.prompt || '';
       } catch (e) {
         window.toast(e.message, 'error');

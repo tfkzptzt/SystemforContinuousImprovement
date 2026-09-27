@@ -6,7 +6,7 @@
    便于在无 Flask 请求上下文（测试、脚本）时复用；
 2. API Key 只写不读：任何接口/日志不回显明文，GET 仅返回 api_key_set 布尔与掩码；
 3. ai_enabled：DB 有值（'0'/'1'）时以 DB 为准；否则回退"环境变量 AI_API_KEY 非空即启用"；
-4. ai_timeout：容错解析（非法值回落默认），默认取 config.AI_TIMEOUT（env，缺省 20.0）；
+4. ai_timeout：容错解析（非法值回落默认），默认取 config.AI_TIMEOUT（env，缺省 60.0）；
 5. ai_prompt：系统提示词模板，DB 非空 > DEFAULT_PROMPT（原 ai_generator 内置提示词）。
 """
 import config
