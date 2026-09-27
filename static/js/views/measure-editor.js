@@ -52,11 +52,11 @@ window.VIEWS.MeasureEditor = {
       <template v-else>
         <div class="notice notice-blue" v-if="genChoice === 'manual'">
           <span class="n-ico">✎</span>
-          <span>手动填写模式：请逐条撰写改进措施。如需改用智能生成，可点击下方「AI 智能生成」。</span>
+          <span>手动填写模式：请逐条撰写改进措施。如需改用智能生成，可点击右上方按钮。</span>
         </div>
-        <div class="btn-row" v-if="isDraft && !generating" style="justify-content:flex-end;margin-bottom:12px;">
-          <button class="btn btn-ghost btn-sm" @click="chooseAI" :disabled="generating">
-            {{ generating ? '正在生成…' : '✦ AI 智能生成' }}
+        <div class="btn-row" v-if="canGenerate && !generating" style="justify-content:flex-end;margin-bottom:12px;">
+          <button class="btn btn-ghost btn-sm" @click="onGenerate" :disabled="generating">
+            {{ measures.length ? '↻ 重新生成' : '✦ AI 智能生成' }}
           </button>
         </div>
 
@@ -119,6 +119,10 @@ window.VIEWS.MeasureEditor = {
   },
   computed: {
     isDraft: function () { return this.report.status === 'draft'; },
+    // 与后端 GENERATE_ALLOWED 保持一致：草稿、已生成、被退回均可（重新）生成
+    canGenerate: function () {
+      return ['draft', 'measures_generated', 'returned'].indexOf(this.report.status) >= 0;
+    },
     showChooser: function () {
       return this.isDraft && !this.measures.length && !this.genChoice;
     }
@@ -151,6 +155,14 @@ window.VIEWS.MeasureEditor = {
     chooseAI: function () {
       this.genChoice = 'ai';
       this.generate();
+    },
+    // /generate 会先删掉库里已有措施再插入，手动改动一并丢失且不可撤销，故先确认
+    onGenerate: function () {
+      if (this.measures.length &&
+          !window.confirm('重新生成会覆盖当前全部措施（含您的手动修改），且无法撤销。\n\n确认继续？')) {
+        return;
+      }
+      this.chooseAI();
     },
     chooseManual: function () {
       this.genChoice = 'manual';
