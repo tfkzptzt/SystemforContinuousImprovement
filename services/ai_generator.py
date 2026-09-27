@@ -18,6 +18,7 @@
 """
 import json
 import re
+import urllib.parse
 import urllib.request
 
 from services import measure_generator
@@ -42,6 +43,10 @@ MAX_ITEM_CHARS = 500
 
 # 请求温度（越低越稳定，措施生成偏确定性）
 _TEMPERATURE = 0.3
+
+# 关闭思考模式的开关只对这些域名下发。enable_thinking 是 DashScope/百炼专有扩展，
+# 其他 OpenAI 兼容服务遇到未知参数可能直接返回 400，因此按域名收窄而不是全局带上。
+_DASHSCOPE_HOSTS = ('aliyuncs.com',)
 
 
 class AiGeneratorError(Exception):
@@ -104,6 +109,12 @@ def format_user_message(context, text):
 
 def _dedup_key(content):
     return _WS_RE.sub('', content or '').lower()
+
+
+def _is_dashscope(base_url):
+    """base_url 是否指向阿里云 DashScope/百炼（含专属 MaaS 部署域名）。"""
+    host = (urllib.parse.urlparse(base_url or '').hostname or '').lower()
+    return any(host == h or host.endswith('.' + h) for h in _DASHSCOPE_HOSTS)
 
 
 def _strip_code_fence(content):
@@ -204,7 +215,8 @@ def _call_chat_completions(user_text, settings):
     :param settings: ai_config.resolve 解析后的配置字典
     :raises AiGeneratorError: 任何网络/HTTP 异常（信息中不含 API Key）
     """
-    url = (settings.get('base_url') or '').rstrip('/') + '/chat/completions'
+    base_url = settings.get('base_url') or ''
+    url = base_url.rstrip('/') + '/chat/completions'
     body = {
         'model': settings.get('model'),
         'temperature': _TEMPERATURE,
@@ -215,6 +227,10 @@ def _call_chat_completions(user_text, settings):
             {'role': 'user', 'content': user_text},
         ],
     }
+    # 思考模式下模型会先输出大段推理再给答案，非流式调用要把这些 token 全等完，
+    # 耗时成倍增长；措施生成不需要推理链，明确关掉。
+    if _is_dashscope(base_url):
+        body['enable_thinking'] = False
     data = json.dumps(body, ensure_ascii=False).encode('utf-8')
     req = urllib.request.Request(url, data=data, method='POST')
     req.add_header('Authorization', 'Bearer ' + (settings.get('api_key') or ''))

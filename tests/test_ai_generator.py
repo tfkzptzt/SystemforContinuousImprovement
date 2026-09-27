@@ -353,6 +353,33 @@ class GenerateNetworkTest(unittest.TestCase):
         self.assertEqual(req.get_header('Authorization'), 'Bearer sk-test')
         self.assertEqual(m.call_args[1]['timeout'], 7)
 
+    def test_thinking_disabled_for_aliyun_base_url(self):
+        # 阿里云端点（含专属 MaaS 部署域名）必须显式关闭思考模式，否则耗时成倍增长
+        payload = json.dumps({'measures': [
+            {'content': '措施', 'verify_indicator': '指标'}]}, ensure_ascii=False)
+        for base in ('https://dashscope.aliyuncs.com/compatible-mode/v1',
+                     'https://ws-6k1yaxly57thatc2.cn-beijing.maas.aliyuncs.com'
+                     '/compatible-mode/v1'):
+            fake = _FakeResponse(json.dumps(_resp(payload), ensure_ascii=False))
+            with self.subTest(base_url=base):
+                with mock.patch('urllib.request.urlopen', return_value=fake) as m:
+                    ai_generator.generate_measures('正文', _settings(base_url=base))
+                body = json.loads(m.call_args[0][0].data.decode('utf-8'))
+                self.assertIs(body['enable_thinking'], False)
+
+    def test_no_thinking_param_for_other_providers(self):
+        # enable_thinking 是 DashScope 专有扩展，下发给其他兼容服务可能被拒（400）
+        payload = json.dumps({'measures': [
+            {'content': '措施', 'verify_indicator': '指标'}]}, ensure_ascii=False)
+        for base in ('https://custom.example/v1', 'https://api.openai.com/v1',
+                     'https://evil-aliyuncs.com/v1', 'https://x.aliyuncs.com.evil/v1'):
+            fake = _FakeResponse(json.dumps(_resp(payload), ensure_ascii=False))
+            with self.subTest(base_url=base):
+                with mock.patch('urllib.request.urlopen', return_value=fake) as m:
+                    ai_generator.generate_measures('正文', _settings(base_url=base))
+                body = json.loads(m.call_args[0][0].data.decode('utf-8'))
+                self.assertNotIn('enable_thinking', body)
+
     def test_context_injected_into_user_message(self):
         payload = json.dumps({'measures': [
             {'content': '措施', 'verify_indicator': '指标'}]}, ensure_ascii=False)

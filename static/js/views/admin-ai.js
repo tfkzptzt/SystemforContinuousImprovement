@@ -70,7 +70,7 @@ window.VIEWS.AdminAi = {
           <label class="field-label">超时（秒）</label>
           <input class="input" type="number" v-model.number="form.timeout"
                  min="1" max="120" step="1" style="max-width:140px;">
-          <p class="form-hint">单次 AI 请求超时时间。默认提示词要求每条措施含问题引用、具体做法与验证口径，生成较慢，建议 60-90 秒；该值须小于 gunicorn 的 --timeout 与 Nginx 的 proxy_read_timeout，否则请求会被上游先掐断。</p>
+          <p class="form-hint">单次 AI 请求超时时间。耗时取决于端点吞吐：公共 DashScope 约 20-50 秒，专属部署端点可能超过 85 秒，建议 60-120 秒；该值须小于 gunicorn 的 --timeout 与 Nginx 的 proxy_read_timeout，否则请求会被上游先掐断。</p>
         </div>
       </div>
 
